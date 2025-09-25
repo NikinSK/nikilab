@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Reader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .pdf-viewer-container {
+            max-width: 900px;
+            margin: auto;
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .pdf-canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border-radius: 0.5rem;
+            margin: auto;
+        }
+
+        /* Custom spinner for loading state */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #1d4ed8;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #textOutput {
+            white-space: pre-wrap;
+            font-family: monospace;
+            word-wrap: break-word;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="pdf-viewer-container flex flex-col p-6 space-y-4">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Simple PDF Reader</h1>
+            <p class="text-gray-500">Select a PDF file from your device to view or extract text.</p>
+        </div>
+
+        <!-- File Input and Controls -->
+        <div class="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-4">
+            <input type="file" id="pdfFile" accept="application/pdf" class="w-full sm:w-auto text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-indigo-50 file:text-indigo-700
+                hover:file:bg-indigo-100 cursor-pointer"/>
+            
+            <div id="controls" class="flex flex-wrap items-center justify-center sm:justify-start space-x-2">
+                <button id="prevBtn" class="bg-indigo-500 text-white p-2 rounded-full shadow-md hover:bg-indigo-600 transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                <span id="pageInfo" class="text-gray-600 font-medium whitespace-nowrap">Page 0 of 0</span>
+                <button id="nextBtn" class="bg-indigo-500 text-white p-2 rounded-full shadow-md hover:bg-indigo-600 transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10l-3.293-3.293a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                
+                <button id="zoomOutBtn" class="bg-gray-300 text-gray-800 p-2 rounded-full shadow-md hover:bg-gray-400 transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                <span id="zoomLevel" class="text-gray-600 font-medium whitespace-nowrap">100%</span>
+                <button id="zoomInBtn" class="bg-gray-300 text-gray-800 p-2 rounded-full shadow-md hover:bg-gray-400 transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+
+                <!-- This is the Extract Text button -->
+                <button id="extractBtn" class="bg-indigo-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-indigo-600 transition-colors duration-200">
+                    Extract Text
+                </button>
+            </div>
+        </div>
+        
+        <!-- Canvas and Loading Indicator -->
+        <div class="relative flex-grow flex items-center justify-center min-h-[500px] border-2 border-dashed border-gray-300 rounded-lg">
+            <canvas id="pdfCanvas" class="pdf-canvas hidden"></canvas>
+            <div id="loadingMessage" class="flex flex-col items-center text-gray-500 space-y-2">
+                <div class="spinner hidden"></div>
+                <p>Please select a PDF file to begin...</p>
+            </div>
+        </div>
+
+        <!-- Text Output Area and Actions -->
+        <div id="textOutputContainer" class="mt-6 hidden">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-2xl font-semibold text-gray-700">Extracted Text</h2>
+                <div class="space-x-2">
+                    <button id="copyBtn" class="bg-green-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-green-600 transition-colors duration-200">
+                        Copy to Clipboard
+                    </button>
+                    <button id="clearBtn" class="bg-red-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-red-600 transition-colors duration-200">
+                        Clear
+                    </button>
+                </div>
+            </div>
+            <div id="textOutput" class="bg-gray-50 p-4 border border-gray-300 rounded-lg max-h-96 overflow-y-auto">
+                No text extracted yet.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const pdfFileInput = document.getElementById('pdfFile');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const extractBtn = document.getElementById('extractBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        const zoomLevel = document.getElementById('zoomLevel');
+        const pdfCanvas = document.getElementById('pdfCanvas');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const textOutputContainer = document.getElementById('textOutputContainer');
+        const textOutput = document.getElementById('textOutput');
+        const controls = document.getElementById('controls');
+        
+        const ctx = pdfCanvas.getContext('2d');
+        
+        let pdfDoc = null;
+        let pageNum = 1;
+        let scale = 1.0;
+        
+        controls.classList.add('hidden');
+        extractBtn.disabled = true;
+        copyBtn.disabled = true;
+        clearBtn.disabled = true;
+
+        const renderPage = async (num) => {
+            if (!pdfDoc) return;
+            
+            const spinner = loadingMessage.querySelector('.spinner');
+            spinner.classList.remove('hidden');
+            pageInfo.textContent = `Rendering...`;
+            pdfCanvas.classList.add('hidden');
+
+            try {
+                const page = await pdfDoc.getPage(num);
+                
+                // Use a dynamic scale based on the container width and current zoom level
+                const baseScale = pdfCanvas.parentElement.clientWidth / page.getViewport({ scale: 1 }).width;
+                const scaledViewport = page.getViewport({ scale: baseScale * scale });
+                
+                pdfCanvas.width = scaledViewport.width;
+                pdfCanvas.height = scaledViewport.height;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: scaledViewport,
+                };
+                await page.render(renderContext).promise;
+                
+                pageNum = num;
+                pageInfo.textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
+                zoomLevel.textContent = `${Math.round(scale * 100)}%`;
+                pdfCanvas.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error rendering page:', error);
+                loadingMessage.innerHTML = `<p class="text-red-500">Error rendering page: ${error.message}</p>`;
+            } finally {
+                spinner.classList.add('hidden');
+            }
+        };
+
+        const loadPdf = async (file) => {
+            loadingMessage.classList.remove('hidden');
+            loadingMessage.innerHTML = '<p>Loading PDF...</p><div class="spinner mt-2"></div>';
+            
+            const fileReader = new FileReader();
+            fileReader.onload = async (e) => {
+                const arrayBuffer = e.target.result;
+                try {
+                    pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    pageNum = 1;
+                    scale = 1.0;
+                    
+                    controls.classList.remove('hidden');
+                    loadingMessage.classList.add('hidden');
+                    extractBtn.disabled = false;
+                    copyBtn.disabled = false;
+                    clearBtn.disabled = false;
+                    
+                    renderPage(pageNum);
+
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    loadingMessage.innerHTML = `<p class="text-red-500">Error loading PDF: ${error.message}</p>`;
+                    controls.classList.add('hidden');
+                    pdfCanvas.classList.add('hidden');
+                    extractBtn.disabled = true;
+                    copyBtn.disabled = true;
+                    clearBtn.disabled = true;
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        };
+        
+        const extractTextFromPdf = async () => {
+            if (!pdfDoc) {
+                textOutput.textContent = 'Please load a PDF first.';
+                return;
+            }
+
+            textOutputContainer.classList.remove('hidden');
+            textOutput.textContent = 'Extracting text...';
+            
+            let fullText = '';
+            try {
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n\n';
+                }
+                
+                textOutput.textContent = fullText;
+            } catch (error) {
+                console.error('Error extracting text:', error);
+                textOutput.textContent = `Error extracting text: ${error.message}`;
+            }
+        };
+
+        const copyTextToClipboard = () => {
+             const textToCopy = textOutput.textContent;
+             if (textToCopy && textToCopy !== 'No text extracted yet.') {
+                 const tempInput = document.createElement('textarea');
+                 tempInput.value = textToCopy;
+                 document.body.appendChild(tempInput);
+                 tempInput.select();
+                 document.execCommand('copy');
+                 document.body.removeChild(tempInput);
+                 textOutput.textContent = 'Text copied to clipboard!';
+                 setTimeout(() => {
+                    textOutput.textContent = textToCopy;
+                 }, 2000);
+             }
+        };
+
+        const clearTextOutput = () => {
+            textOutput.textContent = 'No text extracted yet.';
+            textOutputContainer.classList.add('hidden');
+        };
+
+        pdfFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadPdf(file);
+            }
+        });
+        
+        prevBtn.addEventListener('click', () => {
+            if (pdfDoc && pageNum > 1) {
+                renderPage(pageNum - 1);
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (pdfDoc && pageNum < pdfDoc.numPages) {
+                renderPage(pageNum + 1);
+            }
+        });
+
+        zoomInBtn.addEventListener('click', () => {
+            if (pdfDoc) {
+                scale += 0.25;
+                renderPage(pageNum);
+            }
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            if (pdfDoc && scale > 0.25) {
+                scale -= 0.25;
+                renderPage(pageNum);
+            }
+        });
+
+        extractBtn.addEventListener('click', extractTextFromPdf);
+        copyBtn.addEventListener('click', copyTextToClipboard);
+        clearBtn.addEventListener('click', clearTextOutput);
+
+    </script>
+
+</body>
+</html>
